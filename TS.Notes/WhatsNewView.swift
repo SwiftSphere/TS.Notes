@@ -8,6 +8,7 @@ import SwiftUI
 
 struct WhatsNewView: View {
     @Environment(\.dismiss) var dismiss
+    @State private var releaseNotes: String = "Loading release notes..."
 
     var body: some View {
         ZStack {
@@ -23,41 +24,15 @@ struct WhatsNewView: View {
                     .padding()
                     .foregroundColor(.primary)
 
-                Text("Here are the latest updates and features in TS.Notes:")
-                    .font(.body)
-                    .multilineTextAlignment(.center)
-                    .padding()
-                    .foregroundColor(.secondary)
-
-                Text("• New category management")
-                    .font(.body)
-                    .padding(2)
-                    .foregroundColor(.secondary)
-                Text("• Improved note editing")
-                    .font(.body)
-                    .padding(2)
-                    .foregroundColor(.secondary)
-                Text("• Enhanced search functionality")
-                    .font(.body)
-                    .padding(2)
-                    .foregroundColor(.secondary)
+                ScrollView {
+                    Text(releaseNotes)
+                        .font(.body)
+                        .multilineTextAlignment(.leading)
+                        .padding()
+                        .foregroundColor(.secondary)
+                }
 
                 Spacer()
-
-                Link(destination: URL(string: "https://github.com/your-username/your-repo")!) {
-                    HStack {
-                        Image(systemName: "arrow.up.right.square")
-                            .font(.headline)
-                        Text(Localization.shared.string(for: "visit_github"))
-                            .font(.headline)
-                    }
-                    .foregroundColor(.white)
-                    .padding()
-                    .frame(maxWidth: .infinity)
-                    .background(Color.gray.opacity(0.5)) // Более темный серый
-                    .cornerRadius(15)
-                }
-                .padding(.horizontal)
 
                 Button(action: {
                     dismiss()
@@ -67,7 +42,7 @@ struct WhatsNewView: View {
                         .foregroundColor(.white)
                         .padding()
                         .frame(maxWidth: .infinity)
-                        .background(Color.gray.opacity(0.5)) // Более темный серый
+                        .background(Color.gray.opacity(0.5))
                         .cornerRadius(15)
                 }
                 .padding()
@@ -77,6 +52,60 @@ struct WhatsNewView: View {
             .cornerRadius(20)
             .shadow(radius: 10)
         }
-        .transition(.opacity)
+        .onAppear {
+            loadReleaseNotes()
+        }
     }
+
+    private func loadReleaseNotes() {
+        guard let appVersion = getAppVersion() else {
+            releaseNotes = "Failed to get app version."
+            return
+        }
+
+        fetchReleases { releases in
+            guard let releases = releases else {
+                releaseNotes = "Failed to fetch releases."
+                return
+            }
+
+            if let release = findRelease(for: appVersion, in: releases) {
+                releaseNotes = release.body
+            } else {
+                releaseNotes = "No release notes found for version \(appVersion)."
+            }
+        }
+    }
+
+    private func getAppVersion() -> String? {
+        return Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
+    }
+
+    private func fetchReleases(completion: @escaping ([GitHubRelease]?) -> Void) {
+        let url = URL(string: "https://api.github.com/repos/your-username/your-repo/releases")!
+        
+        URLSession.shared.dataTask(with: url) { data, response, error in
+            guard let data = data, error == nil else {
+                completion(nil)
+                return
+            }
+            
+            do {
+                let releases = try JSONDecoder().decode([GitHubRelease].self, from: data)
+                completion(releases)
+            } catch {
+                print("Failed to decode releases: \(error)")
+                completion(nil)
+            }
+        }.resume()
+    }
+
+    private func findRelease(for version: String, in releases: [GitHubRelease]) -> GitHubRelease? {
+        return releases.first { $0.tag_name == version }
+    }
+}
+
+struct GitHubRelease: Codable {
+    let tag_name: String
+    let body: String
 }
